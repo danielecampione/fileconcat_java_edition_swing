@@ -1,4 +1,4 @@
-package it.fileconcat_java_edition_swing;
+package it.fileconcat_java_edition_swing; 
 
 import javax.swing.*;
 import javax.swing.border.*;
@@ -185,7 +185,7 @@ public class MergeGUI extends JFrame {
                         List<File> files = (List<File>) t.getTransferData(DataFlavor.javaFileListFlavor);
                         List<String> paths = new ArrayList<String>();
                         for (File file : files) paths.add(file.getAbsolutePath());
-                        setSources(paths);
+                        addSources(paths);
                     }
                     e.dropComplete(true);
                 } catch (Exception ex) { e.dropComplete(false); }
@@ -208,7 +208,8 @@ public class MergeGUI extends JFrame {
 
     // ── Riga pulsanti sfoglia ─────────────────────────────────────────────────
     private JPanel buildBrowseRow() {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, s(8), 0));
+        JPanel row = new JPanel();
+        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
         row.setBackground(C_BG);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, s(40)));
@@ -223,8 +224,16 @@ public class MergeGUI extends JFrame {
             @Override public void actionPerformed(ActionEvent e) { chooseFiles(); }
         });
 
+        JButton clearBtn = clearButton("\u00D7  Svuota elenco");
+        clearBtn.addActionListener(new ActionListener() {
+            @Override public void actionPerformed(ActionEvent e) { clearSources(); }
+        });
+
         row.add(folderBtn);
+        row.add(Box.createHorizontalStrut(s(8)));
         row.add(filesBtn);
+        row.add(Box.createHorizontalGlue()); // spinge il bottone Svuota a destra
+        row.add(clearBtn);
         return row;
     }
 
@@ -347,28 +356,82 @@ public class MergeGUI extends JFrame {
         return b;
     }
 
-    // ── Logica selezione sorgenti ─────────────────────────────────────────────
-    private void setSources(final List<String> paths) {
-        this.sources = paths;
+    /** Pulsante distruttivo: sfondo rosso tenue, testo rosso. */
+    private JButton clearButton(String text) {
+        JButton b = new JButton(text);
+        b.setFont(f("SansSerif", Font.PLAIN, 15));
+        b.setBackground(new Color(0xf5e0dc));
+        b.setForeground(C_ERR);
+        b.setOpaque(true);
+        b.setBorderPainted(false);
+        b.setFocusPainted(false);
+        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        b.addMouseListener(new MouseAdapter() {
+            @Override public void mouseEntered(MouseEvent e) {
+                b.setBackground(new Color(0xeecbc5));
+            }
+            @Override public void mouseExited(MouseEvent e) {
+                b.setBackground(new Color(0xf5e0dc));
+            }
+        });
+        return b;
+    }
 
-        if (paths.size() == 1) {
-            String name = new File(paths.get(0)).getName();
-            if (name.isEmpty()) name = paths.get(0);
-            dropLabel.setText("<html><center>\u2713&nbsp; " + escapeHtml(name) + "</center></html>");
-        } else {
-            dropLabel.setText("<html><center>\u2713&nbsp; " + paths.size() + " elementi selezionati</center></html>");
-        }
-        dropLabel.setForeground(C_OK);
+    // ── Logica selezione sorgenti ─────────────────────────────────────────────
+
+    /**
+     * Aggiunge i percorsi alla lista esistente (senza sostituirla),
+     * deduplicando i duplicati. Poi rescansiona TUTTE le sorgenti accumulate.
+     */
+    private void addSources(final List<String> newPaths) {
+        // Deduplicazione: inserisco in un LinkedHashSet per preservare ordine
+        LinkedHashSet<String> merged = new LinkedHashSet<String>(sources);
+        merged.addAll(newPaths);
+        sources = new ArrayList<String>(merged);
+
+        updateDropLabel();
         setStatus("Scansione estensioni\u2026", C_MUTED);
 
+        final List<String> allCopy = new ArrayList<String>(sources);
         new Thread(new Runnable() {
             @Override public void run() {
-                final List<String> found = BusinessLogic.scanExtensions(paths);
+                final List<String> found = BusinessLogic.scanExtensions(allCopy);
                 SwingUtilities.invokeLater(new Runnable() {
                     @Override public void run() { applyFoundExtensions(found); }
                 });
             }
         }).start();
+    }
+
+    /** Aggiorna il testo della drop zone in base al numero di sorgenti accumulate. */
+    private void updateDropLabel() {
+        if (sources.isEmpty()) {
+            dropLabel.setText(
+                "<html><center>\u2B07&nbsp; Trascina qui<br>"
+                + "file &nbsp;&middot;&nbsp; cartelle &nbsp;&middot;&nbsp; .zip</center></html>");
+            dropLabel.setForeground(C_MUTED);
+        } else if (sources.size() == 1) {
+            String name = new File(sources.get(0)).getName();
+            if (name.isEmpty()) name = sources.get(0);
+            dropLabel.setText("<html><center>\u2713&nbsp; " + escapeHtml(name) + "</center></html>");
+            dropLabel.setForeground(C_OK);
+        } else {
+            dropLabel.setText(
+                "<html><center>\u2713&nbsp; " + sources.size() + " elementi selezionati</center></html>");
+            dropLabel.setForeground(C_OK);
+        }
+    }
+
+    /** Svuota l'elenco sorgenti e riporta la UI allo stato iniziale. */
+    private void clearSources() {
+        if (sources.isEmpty()) return;
+        sources.clear();
+        updateDropLabel();
+        // Ripristina le checkbox ai valori predefiniti
+        for (Map.Entry<String, JCheckBox> e : extBoxes.entrySet()) {
+            e.getValue().setSelected(DEFAULT_ON.contains(e.getKey()));
+        }
+        setStatus(" ", C_MUTED);
     }
 
     private void applyFoundExtensions(List<String> found) {
@@ -398,7 +461,7 @@ public class MergeGUI extends JFrame {
         fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         fc.setDialogTitle("Scegli una cartella");
         if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            setSources(Collections.singletonList(fc.getSelectedFile().getAbsolutePath()));
+            addSources(Collections.singletonList(fc.getSelectedFile().getAbsolutePath()));
         }
     }
 
@@ -409,7 +472,7 @@ public class MergeGUI extends JFrame {
         if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             List<String> paths = new ArrayList<String>();
             for (File file : fc.getSelectedFiles()) paths.add(file.getAbsolutePath());
-            setSources(paths);
+            addSources(paths);
         }
     }
 
