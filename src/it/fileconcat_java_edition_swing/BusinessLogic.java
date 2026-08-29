@@ -152,8 +152,7 @@ public class BusinessLogic {
         } else if (isZip(f)) {
             scanZip(f, found);
         } else if (f.isFile()) {
-            String ext = extension(f.getName());
-            if (!ext.isEmpty()) found.add(ext);
+            addTextExtension(f, found);
         }
     }
 
@@ -166,8 +165,7 @@ public class BusinessLogic {
             } else if (child.getName().toLowerCase().endsWith(".zip")) {
                 scanZip(child, found);
             } else {
-                String ext = extension(child.getName());
-                if (!ext.isEmpty()) found.add(ext);
+                addTextExtension(child, found);
             }
         }
     }
@@ -179,14 +177,53 @@ public class BusinessLogic {
                 Enumeration<? extends ZipEntry> entries = zf.entries();
                 while (entries.hasMoreElements()) {
                     ZipEntry entry = entries.nextElement();
+                    if (entry.isDirectory()) continue;
                     String ext = extension(new File(entry.getName()).getName());
-                    if (!ext.isEmpty()) found.add(ext);
+                    if (!ext.isEmpty() && isProbablyText(zf.getInputStream(entry))) {
+                        found.add(ext);
+                    }
                 }
             } finally {
                 zf.close();
             }
         } catch (Exception e) {
             // zip non valido, ignora
+        }
+    }
+
+    private static void addTextExtension(File file, Set<String> found) {
+        String ext = extension(file.getName());
+        if (ext.isEmpty()) return;
+        try {
+            if (isProbablyText(new FileInputStream(file))) found.add(ext);
+        } catch (IOException e) {
+            // file non leggibile, ignora
+        }
+    }
+
+    /**
+     * Riconosce in modo conservativo i file testuali senza dipendere
+     * dall'estensione. In questo modo le nuove estensioni di sorgenti vengono
+     * accettate, mentre archivi, eseguibili e altri binari restano esclusi.
+     */
+    private static boolean isProbablyText(InputStream input) throws IOException {
+        try {
+            byte[] buffer = new byte[8192];
+            int read = input.read(buffer);
+            if (read < 0) return true;
+
+            int suspicious = 0;
+            for (int i = 0; i < read; i++) {
+                int value = buffer[i] & 0xff;
+                if (value == 0) return false;
+                if (value < 0x20 && value != '\n' && value != '\r'
+                        && value != '\t' && value != '\f' && value != '\b') {
+                    suspicious++;
+                }
+            }
+            return suspicious * 100 <= read * 5;
+        } finally {
+            input.close();
         }
     }
 

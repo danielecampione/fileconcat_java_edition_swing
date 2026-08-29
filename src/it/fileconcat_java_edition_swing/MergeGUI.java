@@ -12,29 +12,9 @@ import java.util.List;
 
 public class MergeGUI extends JFrame {
 
-    // ── Estensioni (stessa lista del progetto Python) ──────────────────────────
-    private static final String[] EXTENSIONS = {
-        "txt",  "md",    "rst",  "tex",  "html",  "htm",
-        "css",  "xml",   "yaml", "yml",  "toml",  "ini",
-        "json", "csv",
-        "sh",   "bash",  "zsh",  "bat",  "cmd",   "ps1",
-        "py",   "pyw",
-        "js",   "ts",    "jsx",  "tsx",  "vue",   "svelte",
-        "java", "kt",    "scala","groovy",
-        "c",    "cpp",   "cc",   "cxx",  "h",     "hpp",
-        "cs",   "vb",
-        "sql",
-        "tf",   "hcl",   "env",  "dockerfile",
-        "go",   "rs",    "swift","dart",
-        "rb",   "php",   "pl",   "pm",
-        "r",    "lua",   "ex",   "exs",
-        "conf", "cfg",   "properties", "prefs"
-    };
-
-    private static final Set<String> DEFAULT_ON =
-            new HashSet<String>(Arrays.asList("txt", "md"));
-
-    // ── Colori ────────────────────────────────────────────────────────────────
+    private static final long serialVersionUID = 1319929220092210305L;
+    
+	// ── Colori ────────────────────────────────────────────────────────────────
     private static final Color C_BG      = new Color(0xf7f5f2);
     private static final Color C_SURFACE = Color.WHITE;
     private static final Color C_ACCENT  = new Color(0xe05c2a);
@@ -57,6 +37,7 @@ public class MergeGUI extends JFrame {
     // ── Stato ─────────────────────────────────────────────────────────────────
     private List<String>           sources  = new ArrayList<String>();
     private Map<String, JCheckBox> extBoxes = new LinkedHashMap<String, JCheckBox>();
+    private JPanel                 extGrid;
     private boolean                running  = false;
 
     // ── Widget ────────────────────────────────────────────────────────────────
@@ -256,22 +237,11 @@ public class MergeGUI extends JFrame {
         JPanel card = card(400); // altezza gestita dallo scroll interno
         card.setLayout(new BorderLayout());
 
-        JPanel grid = new JPanel(new GridLayout(0, 4, s(4), s(4)));
-        grid.setBackground(C_SURFACE);
-        grid.setBorder(BorderFactory.createEmptyBorder(s(12), s(14), s(8), s(14)));
+        extGrid = new JPanel(new GridLayout(0, 4, s(4), s(4)));
+        extGrid.setBackground(C_SURFACE);
+        extGrid.setBorder(BorderFactory.createEmptyBorder(s(12), s(14), s(8), s(14)));
 
-        for (String ext : EXTENSIONS) {
-            JCheckBox cb = new JCheckBox("." + ext);
-            cb.setSelected(DEFAULT_ON.contains(ext));
-            cb.setFont(f("SansSerif", Font.PLAIN, 16));
-            cb.setBackground(C_SURFACE);
-            cb.setForeground(C_TEXT);
-            cb.setFocusPainted(false);
-            extBoxes.put(ext, cb);
-            grid.add(cb);
-        }
-
-        JScrollPane scroll = new JScrollPane(grid);
+        JScrollPane scroll = new JScrollPane(extGrid);
         scroll.setPreferredSize(new Dimension(s(500), s(185)));
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getVerticalScrollBar().setUnitIncrement(s(16));
@@ -427,31 +397,40 @@ public class MergeGUI extends JFrame {
         if (sources.isEmpty()) return;
         sources.clear();
         updateDropLabel();
-        // Ripristina le checkbox ai valori predefiniti
-        for (Map.Entry<String, JCheckBox> e : extBoxes.entrySet()) {
-            e.getValue().setSelected(DEFAULT_ON.contains(e.getKey()));
-        }
+        extBoxes.clear();
+        extGrid.removeAll();
+        extGrid.revalidate();
+        extGrid.repaint();
         setStatus(" ", C_MUTED);
     }
 
     private void applyFoundExtensions(List<String> found) {
-        Set<String> foundSet = new HashSet<String>(found);
-        for (Map.Entry<String, JCheckBox> e : extBoxes.entrySet()) {
-            e.getValue().setSelected(foundSet.contains(e.getKey()));
+        extBoxes.clear();
+        extGrid.removeAll();
+
+        for (String ext : found) {
+            JCheckBox cb = new JCheckBox("." + ext);
+            cb.setSelected(true);
+            cb.setFont(f("SansSerif", Font.PLAIN, 16));
+            cb.setBackground(C_SURFACE);
+            cb.setForeground(C_TEXT);
+            cb.setFocusPainted(false);
+            extBoxes.put(ext, cb);
+            extGrid.add(cb);
         }
-        List<String> matched = new ArrayList<String>();
-        for (String ext : EXTENSIONS) {
-            if (foundSet.contains(ext)) matched.add(ext);
-        }
-        if (!matched.isEmpty()) {
+
+        extGrid.revalidate();
+        extGrid.repaint();
+
+        if (!found.isEmpty()) {
             StringBuilder sb = new StringBuilder("Trovate: ");
-            for (int i = 0; i < matched.size(); i++) {
+            for (int i = 0; i < found.size(); i++) {
                 if (i > 0) sb.append(", ");
-                sb.append(".").append(matched.get(i));
+                sb.append(".").append(found.get(i));
             }
             setStatus(sb.toString(), C_OK);
         } else {
-            setStatus("Nessuna estensione riconosciuta. Seleziona manualmente.", C_MUTED);
+            setStatus("Nessun file testuale con estensione trovato.", C_MUTED);
         }
     }
 
@@ -564,6 +543,9 @@ public class MergeGUI extends JFrame {
 
     // ── Inner class: body scrollabile senza espansione orizzontale ─────────────
     private static class ScrollablePanel extends JPanel implements javax.swing.Scrollable {
+    	
+        private static final long serialVersionUID = -2149605122900544407L;
+		
         ScrollablePanel() { super(); }
         @Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
         @Override public int getScrollableUnitIncrement(java.awt.Rectangle r, int o, int d) { return UIScale.scale(20); }
